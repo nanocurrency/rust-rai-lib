@@ -11,7 +11,7 @@ extern crate serde_json;
 extern crate hex;
 
 #[cfg(test)]
-mod test;
+mod tests;
 
 #[no_mangle]
 pub extern fn xrb_hash_transaction(transaction: *const libc::c_char) -> *const libc::c_char {
