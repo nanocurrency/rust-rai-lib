@@ -2,6 +2,7 @@
 name = "rai-lib"
 version = "0.1.0"
 authors = ["Lee Bousfield <ljbousfield@gmail.com>"]
+publish = false
 
 [lib]
 name = "rai_lib"
