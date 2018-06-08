@@ -14,13 +14,12 @@ mod tests;
 
 use blake2::Blake2b;
 use byteorder::{ByteOrder, LittleEndian};
-use digest::{Digest, FixedOutput};
+use digest::{Digest, VariableOutput};
 use ed25519_dalek::{Keypair, PublicKey, SecretKey};
 use nanocurrency_types::{Account, BlockInner};
 use rand::{OsRng, Rng};
 use serde::Deserialize;
 use std::ffi::CStr;
-use std::mem;
 use std::ptr;
 use std::slice;
 
@@ -51,7 +50,7 @@ pub unsafe extern "C" fn xrb_uint256_to_string(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn xrb_uint256_to_account(
+pub unsafe extern "C" fn xrb_uint256_to_address(
     source: *const libc::c_char,
     destination: *mut libc::c_char,
 ) {
@@ -162,17 +161,15 @@ pub unsafe extern "C" fn xrb_seed_key(
     index: libc::c_int,
     destination: *mut libc::c_char,
 ) {
-    let mut blake2b = Blake2b::default();
+    let mut blake2b = <Blake2b as VariableOutput>::new(32)
+        .expect("Invalid hash length");
     blake2b.input(slice::from_raw_parts(seed as *const u8, 32));
-    let seed_bytes: [u8; mem::size_of::<libc::c_int>()] = mem::transmute(index.to_le());
+    let mut seed_bytes = [0u8; 4];
+    LittleEndian::write_u32(&mut seed_bytes, index as u32);
     blake2b.input(&seed_bytes);
-    let result = blake2b.fixed_result();
-    assert_eq!(result.len(), 32);
-    ptr::copy_nonoverlapping(
-        result.as_slice().as_ptr(),
-        destination as *mut u8,
-        result.len(),
-    );
+    blake2b
+        .variable_result(slice::from_raw_parts_mut(destination as *mut u8, 32))
+        .expect("Invalid hash result length");
 }
 
 #[no_mangle]
