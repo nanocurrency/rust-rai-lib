@@ -9,7 +9,7 @@ name = "rai_lib"
 crate-type = ["staticlib"]
 
 [dependencies]
-nanocurrency-types = "0.3.10"
+nanocurrency-types = "0.3.11"
 libc = "0.2.42"
 serde_json = "1.0.20"
 hex = "0.3.2"

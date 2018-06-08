@@ -30,6 +30,17 @@ const HASH_TESTS: &[(&str, Option<&str>)] = &[
         }"#,
         Some("FC5A7FB777110A858052468D448B2DF22B648943C097C0608D1E2341007438B0"),
     ),
+    (
+        r#"{
+            "link":"00",
+            "previous":"0",
+            "balance":"100000000000000000000000000",
+            "representative":"nano_1w77aapnijnm5mo16r3xtpqu7n459r61fqpcdt3kxfmz8gtqgzbozswxmduy",
+            "account":"xrb_34xpajsxasoqksskk9fqkps8jtb1a1fbxgp5usheernizw6w6wajksbgfak8",
+            "type":"state"
+        }"#,
+        Some("22A27E8D0BB947D465D50BFB3D0B6FA420B8B802A69D3388937D8A4F1CD59740"),
+    ),
     (r#"{"type":"invalid"}"#, None),
 ];
 
