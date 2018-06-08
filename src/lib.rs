@@ -10,6 +10,9 @@ extern crate serde_json;
 
 extern crate hex;
 
+#[cfg(test)]
+mod test;
+
 #[no_mangle]
 pub extern fn xrb_hash_transaction(transaction: *const libc::c_char) -> *const libc::c_char {
     let transaction = unsafe { CStr::from_ptr(transaction) };
