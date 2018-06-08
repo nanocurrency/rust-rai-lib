@@ -55,5 +55,7 @@ fn hash() {
 
 #[test]
 fn hash_invalid_utf8() {
-    assert!(xrb_hash_transaction(b"\xc3\x28".as_ptr() as _).is_null());
+    unsafe {
+        assert!(xrb_hash_transaction(b"\xc3\x28".as_ptr() as _).is_null());
+    }
 }
