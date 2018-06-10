@@ -1,5 +1,4 @@
 use std::ffi::{CStr, CString};
-
 use *;
 
 const HASH_TESTS: &[(&str, Option<&str>)] = &[
@@ -77,6 +76,9 @@ fn deterministic_key() {
         let seed = [0u8; 32];
         let mut out = [0u8; 32];
         xrb_seed_key(seed.as_ptr() as _, 0, out.as_mut_ptr() as _);
-        assert_eq!(hex::encode_upper(out), "9F0E444C69F77A49BD0BE89DB92C38FE713E0963165CCA12FAF5712D7657120F");
+        assert_eq!(
+            hex::encode_upper(out),
+            "9F0E444C69F77A49BD0BE89DB92C38FE713E0963165CCA12FAF5712D7657120F"
+        );
     }
 }

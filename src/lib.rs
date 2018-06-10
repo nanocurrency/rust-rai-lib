@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "threading"), allow(unused_imports))]
+
 extern crate blake2;
 extern crate byteorder;
 extern crate digest;
@@ -5,6 +7,7 @@ extern crate ed25519_dalek;
 extern crate hex;
 extern crate libc;
 extern crate nanocurrency_types;
+extern crate num_cpus;
 extern crate rand;
 extern crate serde;
 extern crate serde_json;
@@ -13,15 +16,20 @@ extern crate serde_json;
 mod tests;
 
 use blake2::Blake2b;
-use byteorder::{ByteOrder, LittleEndian};
+use byteorder::{BigEndian, ByteOrder, LittleEndian};
 use digest::{Digest, VariableOutput};
 use ed25519_dalek::{Keypair, PublicKey, SecretKey};
-use nanocurrency_types::{Account, BlockInner};
+use nanocurrency_types::{Account, BlockInner, Network};
 use rand::{OsRng, Rng};
 use serde::Deserialize;
+use std::cmp;
 use std::ffi::CStr;
 use std::ptr;
 use std::slice;
+use std::sync::Arc;
+use std::sync::atomic::{self, AtomicBool};
+use std::sync::mpsc;
+use std::thread;
 
 #[no_mangle]
 pub unsafe extern "C" fn xrb_uint128_to_dec(
@@ -161,8 +169,7 @@ pub unsafe extern "C" fn xrb_seed_key(
     index: libc::c_int,
     destination: *mut libc::c_char,
 ) {
-    let mut blake2b = <Blake2b as VariableOutput>::new(32)
-        .expect("Invalid hash length");
+    let mut blake2b = <Blake2b as VariableOutput>::new(32).expect("Invalid hash length");
     blake2b.input(slice::from_raw_parts(seed as *const u8, 32));
     let mut seed_bytes = [0u8; 4];
     LittleEndian::write_u32(&mut seed_bytes, index as u32);
@@ -251,4 +258,87 @@ pub unsafe extern "C" fn xrb_sign_transaction(
     ptr::copy_nonoverlapping(string.as_ptr() as *const libc::c_char, ret, string.len());
     *ret.offset(string.len() as isize) = 0; // null terminator
     ret
+}
+
+#[cfg(feature = "threading")]
+fn generate_work(root: [u8; 32]) -> u64 {
+    let n_threads = cmp::max(num_cpus::get(), 1);
+    let mut threads = Vec::with_capacity(n_threads);
+    let finished = Arc::new(AtomicBool::new(false));
+    let channel = mpsc::channel();
+    for i in 0..n_threads {
+        let root = root.clone();
+        let send_result = channel.0.clone();
+        let finished = finished.clone();
+        threads.push(thread::spawn(move || {
+            let mut work = (u64::max_value() / (n_threads as u64)) * (i as u64);
+            let threshold = nanocurrency_types::work_threshold(Network::Live);
+            while !finished.load(atomic::Ordering::Relaxed) {
+                if nanocurrency_types::work_value(&root, work) >= threshold {
+                    finished.store(true, atomic::Ordering::Relaxed);
+                    let _ = send_result.send(work);
+                }
+                work += 1;
+            }
+        }));
+    }
+    channel.1.recv().expect("Failed to generate work")
+}
+
+#[cfg(not(feature = "threading"))]
+fn generate_work(root: [u8; 32]) -> u64 {
+    let mut work = 0;
+    let threshold = nanocurrency_types::work_threshold(Network::Live);
+    while nanocurrency_types::work_value(&root, work) < threshold {
+        work += 1;
+    }
+    work
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn xrb_work_transaction(
+    transaction: *const libc::c_char,
+) -> *const libc::c_char {
+    let transaction = CStr::from_ptr(transaction);
+    let transaction = match transaction.to_str() {
+        Ok(s) => s,
+        Err(_) => return ptr::null(),
+    };
+    let mut json = match serde_json::from_str::<serde_json::Value>(transaction) {
+        Ok(x) => x,
+        Err(_) => return ptr::null(),
+    };
+    let block_inner: BlockInner = match BlockInner::deserialize(&json) {
+        Ok(x) => x,
+        Err(_) => return ptr::null(),
+    };
+    let root = block_inner.root_bytes().clone();
+    let work = generate_work(root);
+    {
+        let json_map = match json.as_object_mut() {
+            Some(x) => x,
+            None => return ptr::null(), // shouldn't be possible
+        };
+        let mut work_bytes = [0u8; 8];
+        BigEndian::write_u64(&mut work_bytes, work);
+        json_map.insert(
+            "work".to_string(),
+            serde_json::Value::String(hex::encode(work_bytes)),
+        );
+    }
+    let string = serde_json::to_string(&json).expect("Failed to serialize json");
+    let ret = libc::malloc(string.len() + 1) as *mut libc::c_char;
+    if ret.is_null() {
+        return ptr::null();
+    }
+    ptr::copy_nonoverlapping(string.as_ptr() as *const libc::c_char, ret, string.len());
+    *ret.offset(string.len() as isize) = 0; // null terminator
+    ret
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn xrb_work(root_ptr: *const libc::c_char) -> u64 {
+    let mut root = [0u8; 32];
+    root.clone_from_slice(slice::from_raw_parts(root_ptr as *const u8, 32));
+    generate_work(root)
 }
